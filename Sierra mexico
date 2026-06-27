@@ -1,1 +1,46 @@
+-- Motor de Aimbot "Discreto" (Seguro contra detecciones básicas)
+local function GetClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = Nytro.Flags.fovRadius
+    local MousePos = UIS:GetMouseLocation()
 
+    for _, player in pairs(PLRS:GetPlayers()) do
+        -- Validación: Solo si está vivo y tiene el objetivo
+        if player ~= LP and player.Character and player.Character:FindFirstChild(Nytro.Flags.aimPart) then
+            local pos, onScreen = CAM:WorldToViewportPoint(player.Character[Nytro.Flags.aimPart].Position)
+            
+            -- Validación: Solo si está en pantalla
+            if onScreen then
+                local distance = (Vector2.new(pos.X, pos.Y) - MousePos).Magnitude
+                
+                -- Wallcheck: Solo si no hay paredes (Raycast para no detectar tras muros)
+                local ray = workspace:Raycast(CAM.CFrame.Position, (player.Character[Nytro.Flags.aimPart].Position - CAM.CFrame.Position).Unit * 500)
+                if distance < shortestDistance and (not ray or ray.Instance:IsDescendantOf(player.Character)) then
+                    shortestDistance = distance
+                    closestPlayer = player
+                end
+            end
+        end
+    end
+    return closestPlayer
+end
+
+-- El motor principal con interpolación (Smoothing) para parecer humano
+RS.RenderStepped:Connect(function()
+    local target = GetClosestPlayer()
+    
+    if target and (Nytro.Flags.aim_auto or UIS:IsMouseButtonPressed(Nytro.Flags.aimKey)) then
+        local part = target.Character:FindFirstChild(Nytro.Flags.aimPart)
+        if part then
+            -- Calculamos hacia dónde apuntar
+            local targetPos = CAM:WorldToViewportPoint(part.Position)
+            
+            -- Lógica de Suavizado: movemos la cámara un poco cada frame en vez de un salto brusco
+            -- Esto evita que el servidor nos detecte por "Camera Manipulation"
+            local currentCFrame = CAM.CFrame
+            local goalCFrame = CFrame.new(currentCFrame.Position, part.Position)
+            
+            CAM.CFrame = currentCFrame:Lerp(goalCFrame, 0.15) -- El 0.15 es la suavidad (puedes bajarlo a 0.05 para más disimulo)
+        end
+    end
+end)
